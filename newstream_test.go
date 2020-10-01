@@ -14,8 +14,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-const username = "admin"
-const password = "changeme"
 const addr = "localhost:2113"
 
 func TestNewStreams(t *testing.T) {
@@ -44,6 +42,7 @@ func TestNewStreams(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
+		sawFirst := false
 		for {
 			resp, err := stream.Recv()
 			if err == io.EOF {
@@ -63,6 +62,12 @@ func TestNewStreams(t *testing.T) {
 				fmt.Println("got event", evt.Metadata["type"], evt.StreamIdentifier.String(), evt.CommitPosition)
 				if string(evt.StreamIdentifier.StreamName) == streamName {
 					wg.Done()
+					if evt.Metadata["type"] == "first" {
+						sawFirst = true
+					} else if evt.Metadata["type"] == "second" && !sawFirst {
+						panic("saw second event but have not seen first")
+					}
+
 				}
 
 			default:
@@ -81,7 +86,6 @@ func TestNewStreams(t *testing.T) {
 func connect() streams.StreamsClient {
 	opts := []grpc.DialOption{
 		grpc.WithInsecure(),
-		grpc.WithPerRPCCredentials(creds{username, password}),
 	}
 
 	conn, err := grpc.DialContext(context.Background(), addr, opts...)
