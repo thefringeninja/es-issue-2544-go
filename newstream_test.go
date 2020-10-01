@@ -16,7 +16,7 @@ import (
 
 const username = "admin"
 const password = "changeme"
-const addr = "localhost:9999"
+const addr = "localhost:2113"
 
 func TestNewStreams(t *testing.T) {
 	client := connect()
