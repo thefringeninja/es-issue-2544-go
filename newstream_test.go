@@ -76,9 +76,9 @@ func TestNewStreams(t *testing.T) {
 		}
 	}()
 
-	write(client, streamName, -1, "first")
+	write(client, streamName, -1, "first", 1)
 	time.Sleep(20 * time.Millisecond)
-	write(client, streamName, 0, "second")
+	write(client, streamName, 0, "second", 1)
 
 	wg.Wait()
 }
@@ -96,7 +96,7 @@ func connect() streams.StreamsClient {
 	return streams.NewStreamsClient(conn)
 }
 
-func write(client streams.StreamsClient, streamName string, pos int, eventType string) {
+func write(client streams.StreamsClient, streamName string, pos int, eventType string, count int) {
 	var start *streams.AppendReq_Options
 	if pos == -1 {
 		start = &streams.AppendReq_Options{
@@ -120,22 +120,24 @@ func write(client streams.StreamsClient, streamName string, pos int, eventType s
 		panic(err)
 	}
 
-	err = appender.Send(&streams.AppendReq{
-		Content: &streams.AppendReq_ProposedMessage_{
-			ProposedMessage: &streams.AppendReq_ProposedMessage{
-				Id: &shared.UUID{Value: &shared.UUID_String_{String_: uuid.New().String()}},
-				Metadata: map[string]string{
-					"type":         eventType,
-					"content-type": "application/json",
+	for i := 0; i < count; i++ {
+		err = appender.Send(&streams.AppendReq{
+			Content: &streams.AppendReq_ProposedMessage_{
+				ProposedMessage: &streams.AppendReq_ProposedMessage{
+					Id: &shared.UUID{Value: &shared.UUID_String_{String_: uuid.New().String()}},
+					Metadata: map[string]string{
+						"type":         eventType,
+						"content-type": "application/json",
+					},
+					Data: []byte(`{}`),
 				},
-				Data: []byte(`{}`),
 			},
-		},
-	})
+		})
+	}
 
 	resp, err := appender.CloseAndRecv()
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("write resp", resp)
+	_ = resp.Result.(*streams.AppendResp_Success_)
 }
