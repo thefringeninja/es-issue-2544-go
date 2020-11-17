@@ -17,6 +17,7 @@ import (
 func TestHangWithClient(t *testing.T) {
 	const batchSize = 18
 	const batches = 20
+	ready := make(chan struct{})
 	done := make(chan struct{})
 	config, err := client.ParseConnectionString("esdb://localhost:2113/?tls=false")
 	if err != nil {
@@ -32,12 +33,14 @@ func TestHangWithClient(t *testing.T) {
 	postFix, _ := uuid.NewV4()
 	streamName := fmt.Sprintf("eventstore-tests-hang-%v", postFix)
 
-	subscription, err := esc.SubscribeToAll(context.Background(), position.EndPosition, false, func(event messages.RecordedEvent) {
+	subscription, err := esc.SubscribeToAll(context.Background(), position.StartPosition, false, func(event messages.RecordedEvent) {
 		if event.StreamID != streamName {
 			return
 		}
 
 		switch event.SystemMetadata["type"] {
+		case "start":
+			close(ready)
 		case "complete":
 			close(done)
 		default:
@@ -53,6 +56,7 @@ func TestHangWithClient(t *testing.T) {
 	}
 
 	err = subscription.Start()
+	defer subscription.Stop()
 
 	if err != nil {
 		panic(err)
@@ -64,6 +68,8 @@ func TestHangWithClient(t *testing.T) {
 
 	esc.AppendToStream(context.Background(), streamName, streamrevision.StreamRevisionNoStream, createEvents("start", 1))
 
+	<-ready
+
 	for i := 0; i < batches; i++ {
 		esc.AppendToStream(context.Background(), streamName, streamrevision.NewStreamRevision(lastPos), createEvents("event", 10))
 		esc.AppendToStream(context.Background(), streamName, streamrevision.NewStreamRevision(lastPos+10), createEvents("event", batchSize-10))
@@ -74,7 +80,6 @@ func TestHangWithClient(t *testing.T) {
 
 	esc.AppendToStream(context.Background(), streamName, streamrevision.NewStreamRevision(lastPos), createEvents("complete", 1))
 
-	<-done
 
 	select {
 	case <-time.After(10 * time.Second):
