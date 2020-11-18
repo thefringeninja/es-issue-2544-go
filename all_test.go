@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"testing"
 	"time"
 
@@ -19,12 +18,14 @@ func TestHang(t *testing.T) {
 
 	ready := make(chan struct{})
 	done := make(chan struct{})
+	ctx, _ := context.WithCancel(context.Background())
 
 	go func() {
 		var seen [batchSize*batches + 2]bool
 
-		reader := connect()
-		stream, err := reader.Read(context.Background(), &streams.ReadReq{
+		reader, conn := connect()
+		defer conn.Close()
+		stream, err := reader.Read(ctx, &streams.ReadReq{
 			Options: &streams.ReadReq_Options{
 				ReadDirection: streams.ReadReq_Options_Forwards,
 				FilterOption:  &streams.ReadReq_Options_NoFilter{},
@@ -37,6 +38,7 @@ func TestHang(t *testing.T) {
 				},
 			},
 		})
+
 		if err != nil {
 			panic(err)
 		}
@@ -61,7 +63,7 @@ func TestHang(t *testing.T) {
 					continue
 				}
 
-				log.Println("got event", evt.StreamRevision, evt.Metadata["type"], evt.StreamIdentifier.String(), evt.CommitPosition)
+				// log.Println("got event", evt.StreamRevision, evt.Metadata["type"], evt.StreamIdentifier.String(), evt.CommitPosition)
 				if seen[evt.StreamRevision] {
 					t.Error("saw event twice", evt.StreamRevision, evt.Metadata["type"], evt.StreamIdentifier.String(), evt.CommitPosition)
 				}
@@ -92,7 +94,8 @@ func TestHang(t *testing.T) {
 
 	time.Sleep(10 * time.Millisecond)
 
-	writer := connect()
+	writer, conn := connect()
+	defer conn.Close()
 
 	write(writer, streamName, -1, "start", 1)
 

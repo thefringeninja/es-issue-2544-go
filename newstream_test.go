@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"google.golang.org/grpc/keepalive"
 	"io"
 	"sync"
 	"testing"
@@ -17,7 +18,7 @@ import (
 const addr = "localhost:2113"
 
 func TestNewStreams(t *testing.T) {
-	client := connect()
+	client, _ := connect()
 
 	streamName := fmt.Sprintf("eventstore-tests-%v", uuid.New())
 
@@ -83,9 +84,14 @@ func TestNewStreams(t *testing.T) {
 	wg.Wait()
 }
 
-func connect() streams.StreamsClient {
+func connect() (streams.StreamsClient, *grpc.ClientConn) {
 	opts := []grpc.DialOption{
 		grpc.WithInsecure(),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters {
+			Time:                10 * time.Second, // send pings every 10 seconds if there is no activity
+			Timeout:             time.Second,      // wait 1 second for ping ack before considering the connection dead
+			PermitWithoutStream: true,             // send pings even without active streams
+		}),
 	}
 
 	conn, err := grpc.DialContext(context.Background(), addr, opts...)
@@ -93,7 +99,7 @@ func connect() streams.StreamsClient {
 		panic(err)
 	}
 
-	return streams.NewStreamsClient(conn)
+	return streams.NewStreamsClient(conn), conn
 }
 
 func write(client streams.StreamsClient, streamName string, pos int, eventType string, count int) {

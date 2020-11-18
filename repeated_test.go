@@ -23,7 +23,7 @@ func TestRepeatedEvents(t *testing.T) {
 	go func() {
 		var seen [batchSize*batches + 1]bool
 
-		reader := connect()
+		reader, _ := connect()
 		stream, err := reader.Read(context.Background(), &streams.ReadReq{
 			Options: &streams.ReadReq_Options{
 				ReadDirection: streams.ReadReq_Options_Forwards,
@@ -84,7 +84,7 @@ func TestRepeatedEvents(t *testing.T) {
 
 	time.Sleep(10 * time.Millisecond)
 
-	writer := connect()
+	writer, _ := connect()
 	for i := 0; i < batches; i++ {
 		write(writer, streamName, lastPos, "event", batchSize)
 		lastPos += batchSize

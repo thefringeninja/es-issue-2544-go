@@ -33,7 +33,9 @@ func TestHangWithClient(t *testing.T) {
 	postFix, _ := uuid.NewV4()
 	streamName := fmt.Sprintf("eventstore-tests-hang-%v", postFix)
 
-	subscription, err := esc.SubscribeToAll(context.Background(), position.StartPosition, false, func(event messages.RecordedEvent) {
+	ctx, _ := context.WithCancel(context.Background())
+
+	subscription, err := esc.SubscribeToAll(ctx, position.StartPosition, false, func(event messages.RecordedEvent) {
 		if event.StreamID != streamName {
 			return
 		}
@@ -56,9 +58,9 @@ func TestHangWithClient(t *testing.T) {
 	}
 
 	err = subscription.Start()
-	defer subscription.Stop()
 
 	if err != nil {
+		esc.Close()
 		panic(err)
 	}
 
@@ -83,8 +85,10 @@ func TestHangWithClient(t *testing.T) {
 
 	select {
 	case <-time.After(10 * time.Second):
+		esc.Close()
 		panic("reader never saw the completion event")
 	case <-done:
+		esc.Close()
 	}
 }
 
