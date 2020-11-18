@@ -25,14 +25,17 @@ func TestHangWithClient(t *testing.T) {
 	esc, err := client.NewClient(config)
 
 	err = esc.Connect()
+	defer esc.Close() // remove to see error
+
 	if err != nil {
-		panic(err)
+		t.Fatalf("Unexpected failure %+v", err)
 	}
 
 	postFix, _ := uuid.NewV4()
 	streamName := fmt.Sprintf("eventstore-tests-hang-%v", postFix)
 
-	subscription, err := esc.SubscribeToAll(context.Background(), position.EndPosition, false, func(event messages.RecordedEvent) {
+	ctx := context.Background()
+	subscription, err := esc.SubscribeToAll(ctx, position.EndPosition, false, func(event messages.RecordedEvent) {
 		if event.StreamID != streamName {
 			return
 		}
@@ -48,31 +51,34 @@ func TestHangWithClient(t *testing.T) {
 		fmt.Print(reason)
 	})
 
+
 	if err != nil {
-		panic(err)
+		t.Fatalf("Unexpected failure %+v", err)
 	}
 
 	err = subscription.Start()
+	defer subscription.Stop()
 
 	if err != nil {
-		panic(err)
+		t.Fatalf("Unexpected failure %+v", err)
 	}
+
 
 	lastPos := uint64(0)
 
 	time.Sleep(10 * time.Millisecond)
 
-	esc.AppendToStream(context.Background(), streamName, streamrevision.StreamRevisionNoStream, createEvents("start", 1))
+	esc.AppendToStream(ctx, streamName, streamrevision.StreamRevisionNoStream, createEvents("start", 1))
 
 	for i := 0; i < batches; i++ {
-		esc.AppendToStream(context.Background(), streamName, streamrevision.NewStreamRevision(lastPos), createEvents("event", 10))
-		esc.AppendToStream(context.Background(), streamName, streamrevision.NewStreamRevision(lastPos+10), createEvents("event", batchSize-10))
+		esc.AppendToStream(ctx, streamName, streamrevision.NewStreamRevision(lastPos), createEvents("event", 10))
+		esc.AppendToStream(ctx, streamName, streamrevision.NewStreamRevision(lastPos+10), createEvents("event", batchSize-10))
 		lastPos += batchSize
 
 		time.Sleep(62 * time.Millisecond)
 	}
 
-	esc.AppendToStream(context.Background(), streamName, streamrevision.NewStreamRevision(lastPos), createEvents("complete", 1))
+	esc.AppendToStream(ctx, streamName, streamrevision.NewStreamRevision(lastPos), createEvents("complete", 1))
 
 	<-done
 
